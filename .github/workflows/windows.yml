@@ -1,0 +1,43 @@
+name: Build Windows
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download upstream GPL-2.0 conversion engine
+        shell: pwsh
+        run: git clone --depth 1 https://github.com/djayuffe/sid2midi-public.git upstream
+      - name: Install build dependencies
+        run: python -m pip install --upgrade pip pyinstaller wxPython
+      - name: Build Windows MIDI engine
+        shell: pwsh
+        run: python -m PyInstaller --noconfirm --clean --onefile --console --name SID2MIDI-Engine --paths upstream --add-data "upstream/roms;roms" upstream/sid2midi.py
+      - name: Build accessible Windows interface
+        shell: pwsh
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name SID2MIDI-Accessible app.py
+      - name: Package EXEs, license and source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item dist/SID2MIDI-Engine.exe package/
+          Copy-Item dist/SID2MIDI-Accessible.exe package/
+          Copy-Item README.md, app.py package/
+          Copy-Item upstream/COPYING package/UPSTREAM-COPYING.txt
+          New-Item -ItemType Directory -Force -Path package/upstream-source | Out-Null
+          Get-ChildItem upstream -File -Filter *.py | Copy-Item -Destination package/upstream-source
+          Copy-Item upstream/LICENSE.md package/upstream-source/ -ErrorAction SilentlyContinue
+          Compress-Archive -Path package/* -DestinationPath SID2MIDI-Accessible-Windows-x64.zip -Force
+      - name: Publish build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SID2MIDI-Accessible-Windows-x64
+          path: SID2MIDI-Accessible-Windows-x64.zip
